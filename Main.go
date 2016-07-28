@@ -3,13 +3,14 @@ package main
 import (
 	"log"
 	"errors"
-    	"net/http/cgi"
-    	"net/http"
     	"fmt"
 	"os"
 	"strings"
 	"bytes"
 	"time"
+	"net/url"
+	"net/http"
+	"net/http/cgi"
 	"io/ioutil"
 	"crypto/tls"
 	"launchpad.net/xmlpath"
@@ -104,23 +105,34 @@ func getShibbolethAssertionUrl() (string, error) {
 	return strings.Replace(_shibAssertion, "localhost", "127.0.0.1", 1), nil
 }
 
-func sendInfo(aggregator_url string, aInfo *attributeInfo) error {
-	url := fmt.Sprintf("%s?idp=%s&sp=%s&timestamp=%s&warn=%s",
-		aggregator_url, aInfo.idp, aInfo.sp, aInfo.ts, aInfo.suspicious)
-
-	for _, attr := range aInfo.attributes {
-		if attr != "" {
-			url = fmt.Sprintf("%s&attributes[]=%s", url, attr)
-		}
+func sendInfo(aggregator_url string, aggregator_path string, aInfo *attributeInfo) error {
+	var aagUrl *url.URL
+    	aagUrl, err := url.Parse(aggregator_url)
+    	if err != nil {
+        	return err
     	}
 
-	log.Printf("[info] %s", url)
+	aagUrl.Path += aggregator_path
+    	parameters := url.Values{}
+    	parameters.Add("idp", aInfo.idp)
+    	parameters.Add("sp", aInfo.sp)
+    	parameters.Add("timestamp", aInfo.ts)
+	parameters.Add("warn", aInfo.suspicious)
+	for _, attr := range aInfo.attributes {
+		if attr != "" {
+			parameters.Add("attributes[]", attr)
+		}
+    	}
+	aagUrl.RawQuery = parameters.Encode()
+
+	log.Printf("[info] %q", aagUrl.String())
 	return nil
 }
 
 func main() {
 	log_file := "/var/log/sp-session-hook/session-hook-golang.log"
-	aggregator_url := "'https://clarin-aa.ms.mff.cuni.cz/aaggreg/v1/got"
+	aggregator_url := "'https://clarin-aa.ms.mff.cuni.cz"
+	aggregator_path := "/aaggreg/v1/got"
 
 	//Initialize logging
 	f, err := os.OpenFile(log_file, os.O_RDWR | os.O_CREATE | os.O_APPEND, 0666)
@@ -154,7 +166,7 @@ func main() {
 	}
 
 	//Send info to aagregator
-	errSendInfo := sendInfo(aggregator_url, attrInfo)
+	errSendInfo := sendInfo(aggregator_url, aggregator_path, attrInfo)
 	if errSendInfo != nil {
 		sendErrorResponse(500, "Failed to send attribute information to aagregator: " + errSendInfo.Error())
 		return
