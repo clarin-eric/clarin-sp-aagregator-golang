@@ -42,7 +42,7 @@ func getAttributeAssertions(url string) (*attributeInfo, error) {
 	aInfo.sp = "unkown"
 	aInfo.suspicious = ""
 	t := time.Now()
-	aInfo.ts = t.Format(time.RFC3339)//"2012-11-01T22:08:41+00:00Z") //TODO: set timestamp
+	aInfo.ts = t.Format(time.RFC3339)
 
 	//Get XML response from SP attribute endpoint
 	tr := &http.Transport{
@@ -130,6 +130,9 @@ func sendInfo(aggregator_url string, aggregator_path string, aInfo *attributeInf
 }
 
 func main() {
+	//TODO: make these parameters configurable. Use environment variables?
+	//TODO: log errors to file and provide more generic error messages
+	//TODO: verify aagregator url, and timestamp format specifically, with Jozef before actually sending information over the wire
 	log_file := "/var/log/sp-session-hook/session-hook-golang.log"
 	aggregator_url := "'https://clarin-aa.ms.mff.cuni.cz"
 	aggregator_path := "/aaggreg/v1/got"
