@@ -1,102 +1,165 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"errors"
+    	"net/http/cgi"
+    	"net/http"
+    	"fmt"
+	"os"
 	"strings"
 	"bytes"
 	"time"
-//	"encoding/xml"
 	"io/ioutil"
-	"net/http"
 	"crypto/tls"
-	"github.com/gorilla/mux"
 	"launchpad.net/xmlpath"
 )
 
-func main() {
-	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/hello", index).Methods("GET")
-	log.Fatal(http.ListenAndServe(":9000", router))
+type attributeInfo struct {
+	idp string
+	sp string
+	ts string
+	attributes []string
+	suspicious string
 }
 
-func index(w http.ResponseWriter, r *http.Request) {
-	//References:
-	//	https://wiki.shibboleth.net/confluence/display/SHIB2/NativeSPAssertionExport
-	//	https://wiki.shibboleth.net/confluence/display/SHIB2/NativeSPSessions
+func sendErrorResponse(code int, msg string) {
+    	fmt.Printf("Status:%d %s\r\n", code, msg)
+    	fmt.Printf("Content-Type: text/plain\r\n")
+    	fmt.Printf("\r\n")
+    	fmt.Printf("%s\r\n", msg)
+}
 
-	log.Println("Responding to /hello request")
+func sendRedirectResponse(location string) {
+	fmt.Printf("Status: 302 Found\r\n")
+    	fmt.Printf("Location: %s\r\n", location)
+    	fmt.Printf("\r\n")
+}
 
-	//Get request query parameters
-	_return := r.URL.Query().Get("return")
-	_target := r.URL.Query().Get("target")
+func getAttributeAssertions(url string) (*attributeInfo, error) {
+	aInfo := new(attributeInfo)
+	aInfo.sp = "unkown"
+	aInfo.suspicious = ""
+	t := time.Now()
+	aInfo.ts = t.Format(time.RFC3339)//"2012-11-01T22:08:41+00:00Z") //TODO: set timestamp
 
-	if(len(_return) == 0) {
-		http.Error(w, "return parameter is required", http.StatusBadRequest)
-	} else if(len(_target) == 0) {
-		http.Error(w, "target parameter is required", http.StatusBadRequest)
-	} else {
-		//log.Println(fmt.Sprintf("return=%v, target=%v", _return, _target))
+	//Get XML response from SP attribute endpoint
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{
+		Transport: tr,
+		Timeout: time.Second * 10,
+	}
 
-		//Get Shib-Assertion-Count parameter
-		_shibAssertionCount := r.Header.Get("Shib-Assertion-Count")
-		if(len(_shibAssertionCount) == 0) {
-			http.Error(w, "invalid Shib-Assertion-Count header", http.StatusBadRequest)
-		}
+	response, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
 
-		//Get assertion query url via the Shib-Assertion-NN parameter
-		_shibAssertion := r.Header.Get("Shib-Assertion-"+_shibAssertionCount)
-		if(len(_shibAssertion) == 0) {
-			http.Error(w, "invalid Shib-Assertion-"+_shibAssertionCount+" header", http.StatusBadRequest)
-		}
-		_shibAssertionUrl := strings.Replace(_shibAssertion, "localhost", "127.0.0.1", 1)
+	//Parse and process XML
+	buf, _ := ioutil.ReadAll(response.Body)
+	reader := bytes.NewReader(buf)
+	root, err := xmlpath.Parse(reader)
+	if err != nil {
+		return nil, errors.New("Failed to parse Issuer xpath expression")
+	}
 
-		//Get XML response from SP attribute endpoint
-		tr := &http.Transport{
-        		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		client := &http.Client{
-			Transport: tr,
-			Timeout: time.Second * 10,
-		}
-		response, err := client.Get(_shibAssertionUrl)
+	//Parse SPNameQualifier
+	path := xmlpath.MustCompile("//NameID/@SPNameQualifier")
+	if value, ok := path.String(root); ok {
+		aInfo.sp = value
+	}
 
-		//Process XML response
-		if (err != nil) {
-			fmt.Println(err)
-			http.Error(w, "invalid Shib-Assertion", http.StatusBadRequest)
-		} else {
-			buf, _ := ioutil.ReadAll(response.Body)
-			//log.Println(fmt.Sprintf("%s", buf))
+	//Parse Issuer
+	path = xmlpath.MustCompile("//Issuer")
+	if value, ok := path.String(root); ok {
+		aInfo.idp = value
+	}
 
-			reader := bytes.NewReader(buf)
-
-			//Parse issuer
-			//path := xmlpath.MustCompile("/Assertion/Issuer")
-			path := xmlpath.MustCompile("//Issuer")
-			root, err := xmlpath.Parse(reader)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if value, ok := path.String(root); ok {
-				log.Println(fmt.Sprintf("Issuer: %s", value))
-			}
-
-			//Parse all attributes
-			//path = xmlpath.MustCompile("/Assertion/AttributeStatement/Attribute/@Name")
-			path2 := xmlpath.MustCompile("//Attribute/@Name")
-			root2, err2 := xmlpath.Parse(reader)
-			if err2 != nil {
-				log.Fatal(err2)
-			}
-			iter := path2.Iter(root2)
-			for iter.Next() {
-				if value, ok := path.String(iter.Node()); ok {
-					log.Println(fmt.Sprintf("Attribute: %s", value))
-				}
-			}
-
-			http.Redirect(w, r, _return, http.StatusSeeOther)
+	//Parse all attributes
+	path = xmlpath.MustCompile("//Attribute/@Name")
+	aInfo.attributes = make([]string, 1)
+	iter := path.Iter(root)
+	for iter.Next() {
+		if value, ok := path.String(iter.Node()); ok {
+			aInfo.attributes = append(aInfo.attributes, value)
 		}
 	}
+
+	return aInfo, nil
+}
+
+func getShibbolethAssertionUrl() (string, error) {
+	_shibAssertionCount := os.Getenv("Shib_Assertion_Count")
+	if(len(_shibAssertionCount) == 0) {
+		return "", errors.New("Shib-Assertion-Count variable not found")
+	}
+
+	_shibAssertion := os.Getenv("Shib_Assertion_"+_shibAssertionCount)
+	if(len(_shibAssertion) == 0) {
+		return "", errors.New("Shib_Assertion_"+_shibAssertionCount+" variable not found")
+	}
+
+	return strings.Replace(_shibAssertion, "localhost", "127.0.0.1", 1), nil
+}
+
+func sendInfo(aggregator_url string, aInfo *attributeInfo) error {
+	url := fmt.Sprintf("%s?idp=%s&sp=%s&timestamp=%s&warn=%s",
+		aggregator_url, aInfo.idp, aInfo.sp, aInfo.ts, aInfo.suspicious)
+
+	for _, attr := range aInfo.attributes {
+		if attr != "" {
+			url = fmt.Sprintf("%s&attributes[]=%s", url, attr)
+		}
+    	}
+
+	log.Printf("[info] %s", url)
+	return nil
+}
+
+func main() {
+	log_file := "/var/log/sp-session-hook/session-hook-golang.log"
+	aggregator_url := "'https://clarin-aa.ms.mff.cuni.cz/aaggreg/v1/got"
+
+	//Initialize logging
+	f, err := os.OpenFile(log_file, os.O_RDWR | os.O_CREATE | os.O_APPEND, 0666)
+	if err != nil {
+		sendErrorResponse(500, fmt.Sprintf("error opening file: %v", err))
+		return
+	}
+	defer f.Close()
+	log.SetOutput(f)
+
+	//Get url query parameters
+    	req, err := cgi.Request()
+    	if err != nil {
+        	sendErrorResponse(500, "cannot get cgi request: " + err.Error())
+       		return
+    	}
+	_return := req.URL.Query().Get("return")
+
+	//Get assertion url
+	_shibAssertionUrl, err := getShibbolethAssertionUrl()
+	if err != nil {
+		sendErrorResponse(500, "Failed to parse shibboleth variables: " + err.Error())
+		return
+	}
+
+	//Get attribute assertions
+	attrInfo, err := getAttributeAssertions(_shibAssertionUrl)
+	if err != nil {
+		sendErrorResponse(500, "Failed to parse shibboleth attribute assertions: " + err.Error())
+		return
+	}
+
+	//Send info to aagregator
+	errSendInfo := sendInfo(aggregator_url, attrInfo)
+	if errSendInfo != nil {
+		sendErrorResponse(500, "Failed to send attribute information to aagregator: " + errSendInfo.Error())
+		return
+	}
+
+	//Redirect client
+	sendRedirectResponse(_return)
 }
