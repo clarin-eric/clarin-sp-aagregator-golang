@@ -8,6 +8,7 @@ import (
 	"strings"
 	"bytes"
 	"time"
+	"encoding/json"
 	"net/url"
 	"net/http"
 	"net/http/cgi"
@@ -15,6 +16,10 @@ import (
 	"crypto/tls"
 	"launchpad.net/xmlpath"
 )
+
+type apiResponse struct {
+    ok bool `json:"ok"`
+}
 
 type attributeInfo struct {
 	idp string
@@ -106,8 +111,7 @@ func getShibbolethAssertionUrl() (string, error) {
 }
 
 func sendInfo(aggregator_url string, aggregator_path string, aInfo *attributeInfo) error {
-	var aagUrl *url.URL
-    	aagUrl, err := url.Parse(aggregator_url)
+	aagUrl, err := url.Parse(aggregator_url)
     	if err != nil {
         	return err
     	}
@@ -125,22 +129,58 @@ func sendInfo(aggregator_url string, aggregator_path string, aInfo *attributeInf
     	}
 	aagUrl.RawQuery = parameters.Encode()
 
-	log.Printf("[info] %q", aagUrl.String())
+	logInfo(aagUrl.String())
+
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	response, err := client.Get(aagUrl.String())
+	if err != nil {
+		return err
+	}
+
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+	   	return err
+	}
+
+	var s = new(apiResponse)
+	err = json.Unmarshal(body, &s)
+	if(err != nil){
+		return err
+	}
+
+	if(s.ok) {
+		logInfo("Success")
+	} else {
+		logInfo(fmt.Sprintf("Failed: [%v]", body))
+	}
 	return nil
 }
+
+func logInfo(msg string) {
+	log.Printf("[INFO] %s", msg)
+}
+
+func logError(msg string) {
+	log.Printf("[ERROR] %s", msg)
+	sendErrorResponse(500, msg)
+}
+
 
 func main() {
 	//TODO: make these parameters configurable. Use environment variables?
 	//TODO: log errors to file and provide more generic error messages
 	//TODO: verify aagregator url, and timestamp format specifically, with Jozef before actually sending information over the wire
 	log_file := "/var/log/sp-session-hook/session-hook-golang.log"
-	aggregator_url := "'https://clarin-aa.ms.mff.cuni.cz"
+	aggregator_url := "https://clarin-aa.ms.mff.cuni.cz"
 	aggregator_path := "/aaggreg/v1/got"
 
 	//Initialize logging
 	f, err := os.OpenFile(log_file, os.O_RDWR | os.O_CREATE | os.O_APPEND, 0666)
 	if err != nil {
-		sendErrorResponse(500, fmt.Sprintf("error opening file: %v", err))
+		logError(fmt.Sprintf("error opening file: %v", err))
 		return
 	}
 	defer f.Close()
@@ -149,7 +189,7 @@ func main() {
 	//Get url query parameters
     	req, err := cgi.Request()
     	if err != nil {
-        	sendErrorResponse(500, "cannot get cgi request: " + err.Error())
+        	logError("cannot get cgi request: " + err.Error())
        		return
     	}
 	_return := req.URL.Query().Get("return")
@@ -157,21 +197,21 @@ func main() {
 	//Get assertion url
 	_shibAssertionUrl, err := getShibbolethAssertionUrl()
 	if err != nil {
-		sendErrorResponse(500, "Failed to parse shibboleth variables: " + err.Error())
+		logError("Failed to parse shibboleth variables: " + err.Error())
 		return
 	}
 
 	//Get attribute assertions
 	attrInfo, err := getAttributeAssertions(_shibAssertionUrl)
 	if err != nil {
-		sendErrorResponse(500, "Failed to parse shibboleth attribute assertions: " + err.Error())
+		logError("Failed to parse shibboleth attribute assertions: " + err.Error())
 		return
 	}
 
 	//Send info to aagregator
 	errSendInfo := sendInfo(aggregator_url, aggregator_path, attrInfo)
 	if errSendInfo != nil {
-		sendErrorResponse(500, "Failed to send attribute information to aagregator: " + errSendInfo.Error())
+		logError("Failed to send attribute information to aagregator: " + errSendInfo.Error())
 		return
 	}
 
