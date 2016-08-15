@@ -27,7 +27,7 @@ const key_config_aag_url = "aag_url"
 const key_config_aag_path = "aag_path"
 
 const default_log_path = "/var/log/sp-session-hook/"
-const default_log_file = "session-hook-golang.log"
+const default_log_file = "session-hook.log"
 const default_aggregator_url = "https://clarin-aa.ms.mff.cuni.cz"
 const default_aggregator_path = "/aaggreg/v1/got"
 const default_submitSpStats = false
