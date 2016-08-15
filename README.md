@@ -40,3 +40,19 @@ Configure the golang cgi executable on a location in your webserver:
 	Require             shibboleth
 </Location>
 ```
+
+The cgi executable can be customized via the following parameters:
+
+| Name            | Default Value                    | Description                                 |
+| --------------- | -------------------------------- | ------------------------------------------- |
+| submit_sp_stats | false                            | If true submit stats to remote service      |
+| log_path        | /var/log/sp-session-hook/        | Directory where the log file will be stored | 
+| log_file        | session-hook.log                 | Name of the log file                        |
+| aag_url         | https://clarin-aa.ms.mff.cuni.cz | URL of the remote endpoint                  |
+| aag_path        | /aaggreg/v1/got                  | Path of the service                         |
+
+Use the `SetEnv` directive in apache to set these variables, see [mod_env](http://httpd.apache.org/docs/current/mod/mod_env.html) and [env](http://httpd.apache.org/docs/current/env.html) for more info.
+
+```
+SetEnv submit_sp_stats false
+```
