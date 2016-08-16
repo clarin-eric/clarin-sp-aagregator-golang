@@ -83,7 +83,7 @@ func getAttributeAssertions(url string) (*attributeInfo, error) {
 	reader := bytes.NewReader(buf)
 	root, err := xmlpath.Parse(reader)
 	if err != nil {
-		return nil, errors.New("Failed to parse Issuer xpath expression")
+		return nil, errors.New("Failed to parse xml: "+ err.Error())
 	}
 
 	//Parse SPNameQualifier
@@ -103,9 +103,15 @@ func getAttributeAssertions(url string) (*attributeInfo, error) {
 	aInfo.attributes = make([]string, 1)
 	iter := path.Iter(root)
 	for iter.Next() {
-		if value, ok := path.String(iter.Node()); ok {
+		node := iter.Node()
+		aInfo.attributes = append(aInfo.attributes, fmt.Sprintf("%v", node))
+		/*
+		logInfo(fmt.Sprintf("name=%v", node))
+		if value, ok := path.String(node); ok {
+			logInfo("attribute="+value)
 			aInfo.attributes = append(aInfo.attributes, value)
 		}
+		*/
 	}
 
 	return aInfo, nil
@@ -122,6 +128,8 @@ func getShibbolethAssertionUrl() (string, error) {
 		return "", errors.New(key_shib_assertion+_shibAssertionCount+" variable not found")
 	}
 
+	//TODO: make this configurable
+	_shibAssertion = strings.Replace(_shibAssertion, "catalog.clarin.eu", "127.0.0.1", 1)
 	return strings.Replace(_shibAssertion, "localhost", "127.0.0.1", 1), nil
 }
 
