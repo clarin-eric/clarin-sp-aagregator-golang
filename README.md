@@ -50,6 +50,7 @@ The cgi executable can be customized via the following parameters:
 | log_file        | session-hook.log                 | Name of the log file                        |
 | aag_url         | https://clarin-aa.ms.mff.cuni.cz | URL of the remote endpoint                  |
 | aag_path        | /aaggreg/v1/got                  | Path of the service                         |
+| sp_entity_id    | https://sp.catalog.clarin.eu     | Specify hardcoded entity id                 |
 
 Use the `SetEnv` directive in apache to set these variables, see [mod_env](http://httpd.apache.org/docs/current/mod/mod_env.html) and [env](http://httpd.apache.org/docs/current/env.html) for more info.
 

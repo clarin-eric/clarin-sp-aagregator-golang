@@ -25,12 +25,15 @@ const key_config_log_path = "log_path"
 const key_config_log_file = "log_file"
 const key_config_aag_url = "aag_url"
 const key_config_aag_path = "aag_path"
+const key_sp_entity_id = "sp_entity_id"
+
 
 const default_log_path = "/var/log/sp-session-hook/"
 const default_log_file = "session-hook.log"
 const default_aggregator_url = "https://clarin-aa.ms.mff.cuni.cz"
 const default_aggregator_path = "/aaggreg/v1/got"
 const default_submitSpStats = false
+const default_sp_entity_id = "https://sp.catalog.clarin.eu"
 
 type apiResponse struct {
     ok bool `json:"ok"`
@@ -57,7 +60,7 @@ func sendRedirectResponse(location string) {
     	fmt.Printf("\r\n")
 }
 
-func getAttributeAssertions(url string) (*attributeInfo, error) {
+func getAttributeAssertions(url string, entity_id string) (*attributeInfo, error) {
 	aInfo := new(attributeInfo)
 	aInfo.sp = "unkown"
 	aInfo.suspicious = ""
@@ -87,13 +90,14 @@ func getAttributeAssertions(url string) (*attributeInfo, error) {
 	}
 
 	//Parse SPNameQualifier
-	path := xmlpath.MustCompile("//NameID/@SPNameQualifier")
-	if value, ok := path.String(root); ok {
-		aInfo.sp = value
-	}
+	//path := xmlpath.MustCompile("//NameID/@SPNameQualifier")
+	//if value, ok := path.String(root); ok {
+	//	aInfo.sp = value
+	//}
+	aInfo.sp = entity_id
 
 	//Parse Issuer
-	path = xmlpath.MustCompile("//Issuer")
+	path := xmlpath.MustCompile("//Issuer")
 	if value, ok := path.String(root); ok {
 		aInfo.idp = value
 	}
@@ -224,8 +228,8 @@ func getBooleanConfigValue(key string, defaultValue bool) (bool) {
 
 func main() {
 	//TODO: log errors to file and provide more generic error messages
-
 	//Parse configuration options
+	entity_id := getStringConfigValue(key_sp_entity_id, default_sp_entity_id)
 	log_path := getStringConfigValue(key_config_log_path, default_log_path)
 	log_file := getStringConfigValue(key_config_log_file, default_log_file)
 	aggregator_url := getStringConfigValue(key_config_aag_url, default_aggregator_url)
@@ -257,7 +261,7 @@ func main() {
 	}
 
 	//Get attribute assertions
-	attrInfo, err := getAttributeAssertions(_shibAssertionUrl)
+	attrInfo, err := getAttributeAssertions(_shibAssertionUrl, entity_id)
 	if err != nil {
 		logErrorWithResponse("Failed to parse shibboleth attribute assertions: " + err.Error())
 		return
