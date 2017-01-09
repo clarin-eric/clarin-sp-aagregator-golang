@@ -257,6 +257,7 @@ func main() {
 	_shibAssertionUrl, err := getShibbolethAssertionUrl()
 	if err != nil {
 		logErrorWithResponse("Failed to parse shibboleth variables: " + err.Error())
+		sendRedirectResponse(_return)
 		return
 	}
 
@@ -264,6 +265,7 @@ func main() {
 	attrInfo, err := getAttributeAssertions(_shibAssertionUrl, entity_id)
 	if err != nil {
 		logErrorWithResponse("Failed to parse shibboleth attribute assertions: " + err.Error())
+		sendRedirectResponse(_return)
 		return
 	}
 
@@ -271,6 +273,7 @@ func main() {
 	errSendInfo := sendInfo(submitSpStats, aggregator_url, aggregator_path, attrInfo)
 	if errSendInfo != nil {
 		logErrorWithResponse("Failed to send attribute information to aagregator: " + errSendInfo.Error())
+		sendRedirectResponse(_return)
 		return
 	}
 
