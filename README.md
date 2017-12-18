@@ -6,7 +6,7 @@ The implementation is a port of the php based [clarin-sp-aaggregator](https://gi
 # Configuration
 
 ## Shibboleth Service Provider
-Follow the guidelines provided [here](https://github.com/ufal/clarin-sp-aaggregator#shibboleth2xml).
+Follow the guidelines provided [here](https://github.com/ufal/clarin-sp-aaggregator#shibboleth2xml). Bottom line is to add `exportLocation` and `exportACL` attributes to your applications `session` definition in `shibboleth2.xml`. See [NativeSPSessions](https://wiki.shibboleth.net/confluence/display/SHIB2/NativeSPSessions) for more information.
 
 Use `sessionHook="/aa-statistics"` instead of `sessionHook="/php/aa-statistics.php"`.
 
