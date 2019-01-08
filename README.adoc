@@ -1,0 +1,15 @@
+= CLARIN-ERIC docker build workflow
+:caution-caption: ☡ CAUTION
+:important-caption: ❗ IMPORTANT
+:note-caption: 💡 NOTE
+:sectanchors:
+:sectlinks:
+:sectnumlevels: 6
+:sectnums:
+:source-highlighter: pygments
+:tip-caption: 💡 TIP
+:toc-placement: preamble
+:toc:
+:warning-caption: ⚠ WARNING
+
+Replaced by https://gitlab.com/CLARIN-ERIC/docker-shibboleth-aagregator
